@@ -3,7 +3,37 @@ import numpy as np
 import brevitas
 import torch
 import onnx
+from onnx.tools.update_model_dims import update_inputs_outputs_dims
 from finn.custom_op.registry import getCustomOp
+from finn.util.basic import get_by_name
+
+def set_batch_size(model, batch_size):
+    input_dims = {}
+    output_dims = {}
+
+    for input in model.graph.input:
+        input_name = input.name
+        shape = model.get_tensor_shape(input_name)
+        if len(shape) > 0 and shape[0] == 0:
+            shape[0] = batch_size
+        input_dims[input_name] = shape
+
+    for output in model.graph.output:
+        output_name = output.name
+        shape = model.get_tensor_shape(output_name)
+        if len(shape) > 0 and shape[0] == 0:
+            shape[0] = batch_size
+        output_dims[output_name] = shape
+    
+    update_inputs_outputs_dims(model._model_proto,input_dims,output_dims)
+
+def add_default_attribute(model):
+    for node in model.graph.node:
+        if node.op_type == "MaxPool":
+            attr = get_by_name(node.attribute, "pads")
+            if attr == None:
+                attr_proto = onnx.helper.make_attribute("pads", [0,0,0,0])
+                node.attribute.append(attr_proto)
 
 #copy from fpgaConvNet optimiser
 def add_input_from_initializer(model : onnx.ModelProto):
@@ -105,81 +135,87 @@ def add_activation_quantization_multithreshold(model, activation_width=16):
         
         return thresholds
         
-    
-    #quantise inputs
-    node_ind = 0
-    n = model.graph.node[node_ind]
-    node_input = n.input[0]
-    channels = model.get_tensor_shape(n.input[0])[1]
-    thresholds = _get_thresholds(activation_width, True)
-    multi_thresholds = np.repeat([thresholds], channels, axis=0)
-    
-    threshold_value_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, multi_thresholds.shape)
-    ti = model.graph.input.add()
-    ti.name = threshold_value_info.name
-    model.set_initializer(threshold_value_info.name,multi_thresholds)
-    new_input_value1_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, model.get_tensor_shape(n.input[0]))
-    model.graph.value_info.append(new_input_value1_info)
-    multi_threshold_node = onnx.helper.make_node("MultiThreshold", [node_input, threshold_value_info.name], [new_input_value1_info.name], domain="finn.custom_op.general")
-    multi_threshold_node.name = "MultiThreshold" + str(node_ind)
-    datatype = brevitas.export.onnx.finn.utils.finn_datatype(torch.tensor(activation_width), True)
-    instr = getCustomOp(multi_threshold_node)
-    instr.set_nodeattr("out_dtype", datatype)
-    
-    bias_value_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, [1])
-    bi = model.graph.input.add()
-    bi.name = bias_value_info.name
-    model.set_initializer(bi.name,np.array([-(2 ** (activation_width-1))],dtype=np.float32))
-    new_input_value2_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, model.get_tensor_shape(n.input[0]))
-    model.graph.value_info.append(new_input_value2_info)
-    bias_node = onnx.helper.make_node("Add", [new_input_value1_info.name, bias_value_info.name], [new_input_value2_info.name])
+    processed_nodes = []
 
-    scale_value_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, [1])
-    si = model.graph.input.add()
-    si.name = scale_value_info.name
-    model.set_initializer(si.name,np.array([1 / (2 ** (activation_width-1))],dtype=np.float32))
-    new_input_value3_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, model.get_tensor_shape(n.input[0]))
-    model.graph.value_info.append(new_input_value3_info)
-    n.input[0] = new_input_value3_info.name
-    scale_node = onnx.helper.make_node("Mul", [new_input_value2_info.name, scale_value_info.name], [new_input_value3_info.name])
+    for node in model.graph.node:
+        if node not in processed_nodes and (node.op_type == "Conv" or node.op_type == "MatMul" or node.op_type == "Gemm"):
+            processed_nodes.append(node)
+            producer = model.find_producer(node.input[0])
 
-    model.graph.node.insert(node_ind, scale_node)
-    model.graph.node.insert(node_ind, bias_node)        
-    model.graph.node.insert(node_ind, multi_threshold_node)
-    
-                                           
-    #replace relu with multithresholds
-    for n in model.graph.node:
-        node_ind += 1
-                                            
-        if n.op_type == "Relu":
-            node_input = n.input[0]
-            node_output = n.output[0]
-            channels = model.get_tensor_shape(n.input[0])[1]
-            thresholds = _get_thresholds(activation_width, False)
-            multi_thresholds = np.repeat([thresholds], channels, axis=0)
-                                            
-            threshold_value_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, multi_thresholds.shape)
-            ti = model.graph.input.add()
-            ti.name = threshold_value_info.name
-            model.set_initializer(threshold_value_info.name,multi_thresholds)
-            new_input_value1_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, model.get_tensor_shape(n.input[0]))
-            model.graph.value_info.append(new_input_value1_info)
-            multi_threshold_node = onnx.helper.make_node("MultiThreshold", [node_input, threshold_value_info.name], [new_input_value1_info.name], domain="finn.custom_op.general")
-            multi_threshold_node.name = "MultiThreshold" + str(node_ind)
-            datatype = brevitas.export.onnx.finn.utils.finn_datatype(torch.tensor(activation_width), False)
-            instr = getCustomOp(multi_threshold_node)
-            instr.set_nodeattr("out_dtype", datatype)
-    
-            scale_value_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, [1])
-            si = model.graph.input.add()
-            si.name = scale_value_info.name
-            model.set_initializer(si.name,np.array([1 / (2 ** (activation_width)-1)],dtype=np.float32))
-            scale_node = onnx.helper.make_node("Mul", [new_input_value1_info.name, scale_value_info.name], [node_output])
-            
-            model.graph.node.remove(n)
-            model.graph.node.insert(node_ind, scale_node)        
-            model.graph.node.insert(node_ind, multi_threshold_node)
+            while producer != None and (producer.op_type == "Flatten" or producer.op_type == "MaxPool"): # FINN only support conv-activation-pooling
+                node = producer
+                producer = model.find_producer(producer.input[0])
+
+            if producer != None and producer.op_type == "Relu":   
+                node_index = [i for i,n in enumerate(model.graph.node) if n == producer][0]
+
+                relu_input = producer.input[0]
+                relu_output = producer.output[0]
+                channels = model.get_tensor_shape(relu_input)[1]
+                thresholds = _get_thresholds(activation_width, False)
+                multi_thresholds = np.repeat([thresholds], channels, axis=0)
+                                                
+                threshold_value_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, multi_thresholds.shape)
+                ti = model.graph.input.add()
+                ti.name = threshold_value_info.name
+                model.set_initializer(threshold_value_info.name,multi_thresholds)
+                new_input_value1_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, model.get_tensor_shape(relu_input))
+                model.graph.value_info.append(new_input_value1_info)
+                multi_threshold_node = onnx.helper.make_node("MultiThreshold", [relu_input, threshold_value_info.name], [new_input_value1_info.name], domain="finn.custom_op.general")
+                multi_threshold_node.name = "MultiThreshold" + str(node_index)
+                datatype = brevitas.export.onnx.finn.utils.finn_datatype(torch.tensor(activation_width), False)
+                instr = getCustomOp(multi_threshold_node)
+                instr.set_nodeattr("out_dtype", datatype)
+        
+                scale_value_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, [1])
+                si = model.graph.input.add()
+                si.name = scale_value_info.name
+                model.set_initializer(si.name,np.array([1 / (2 ** (activation_width)-1)],dtype=np.float32))
+                scale_node = onnx.helper.make_node("Mul", [new_input_value1_info.name, scale_value_info.name], [relu_output])
+                
+                model.graph.node.remove(producer)
+                model.graph.node.insert(node_index, scale_node)        
+                model.graph.node.insert(node_index, multi_threshold_node)
+            else:
+                node_index = [i for i,n in enumerate(model.graph.node) if n == node][0]
+
+                node_input = node.input[0]
+                channels = model.get_tensor_shape(node.input[0])[1]
+                thresholds = _get_thresholds(activation_width, True)
+                multi_thresholds = np.repeat([thresholds], channels, axis=0)
+                
+                threshold_value_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, multi_thresholds.shape)
+                ti = model.graph.input.add()
+                ti.name = threshold_value_info.name
+                model.set_initializer(threshold_value_info.name,multi_thresholds)
+                new_input_value1_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, model.get_tensor_shape(node_input))
+                model.graph.value_info.append(new_input_value1_info)
+                multi_threshold_node = onnx.helper.make_node("MultiThreshold", [node_input, threshold_value_info.name], [new_input_value1_info.name], domain="finn.custom_op.general")
+                multi_threshold_node.name = "MultiThreshold" + str(node_index)
+                datatype = brevitas.export.onnx.finn.utils.finn_datatype(torch.tensor(activation_width), True)
+                instr = getCustomOp(multi_threshold_node)
+                instr.set_nodeattr("out_dtype", datatype)
+                
+                bias_value_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, [1])
+                bi = model.graph.input.add()
+                bi.name = bias_value_info.name
+                model.set_initializer(bi.name,np.array([-(2 ** (activation_width-1))],dtype=np.float32))
+                new_input_value2_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, model.get_tensor_shape(node_input))
+                model.graph.value_info.append(new_input_value2_info)
+                bias_node = onnx.helper.make_node("Add", [new_input_value1_info.name, bias_value_info.name], [new_input_value2_info.name])
+
+                scale_value_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, [1])
+                si = model.graph.input.add()
+                si.name = scale_value_info.name
+                model.set_initializer(si.name,np.array([1 / (2 ** (activation_width-1))],dtype=np.float32))
+                new_input_value3_info = onnx.helper.make_tensor_value_info(model.make_new_valueinfo_name(), onnx.TensorProto.FLOAT, model.get_tensor_shape(node_input))
+                model.graph.value_info.append(new_input_value3_info)
+                node.input[0] = new_input_value3_info.name
+                scale_node = onnx.helper.make_node("Mul", [new_input_value2_info.name, scale_value_info.name], [new_input_value3_info.name])
+
+                model.graph.node.insert(node_index, scale_node)
+                model.graph.node.insert(node_index, bias_node)        
+                model.graph.node.insert(node_index, multi_threshold_node) 
 
 def remove_redundant_nodes(model):
     for n in model.graph.node:
