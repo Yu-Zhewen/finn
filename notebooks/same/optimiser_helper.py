@@ -13,12 +13,12 @@ from networkx import DiGraph
 
 def parse(model):
     # create the computation graph
-    network = FinnNetWorkWrapper()
+    network = DiGraph()
     ## add nodes
     for finn_node in model.graph.node:
         channels_in  = model.get_tensor_shape(finn_node.input[0])[-1]
         channels_out = model.get_tensor_shape(finn_node.output[0])[-1]
-        network.add_node(FinnNodeWrapper(getCustomOp(finn_node), channels_in, channels_out))
+        network.add_node(finn_node.name, hw=FinnNodeWrapper(getCustomOp(finn_node), channels_in, channels_out))
     ## add edges
     for i in range(len(list(network.nodes))-1):
         network.add_edge(list(network.nodes)[i], list(network.nodes)[i+1])
@@ -42,33 +42,17 @@ def optimiser_main(model):
     # perform optimisation on the computation graph
     #opt = BruteForce(network, platform)
     #opt.optimise()
-    
+
     opt = SimulatedAnnealing(network, platform)
     opt.optimise()
     load_from_opt_network(network, opt.network)
-
-class FinnNetWorkWrapper(DiGraph):
-    def __init__(self):
-        super().__init__()
-
-    def validate(self):
-        for i, n in enumerate(self.nodes):
-            if n.finn_node.onnx_node.op_type == "StreamingFCLayer_Batch":
-                prev = list(self.nodes)[i-1]
-                if prev.finn_node.onnx_node.op_type != "StreamingFCLayer_Batch":
-                    if prev.channel_out_folding != n.channel_in_folding:
-                        return False
-            else:
-                if n.channel_in_folding != n.channel_out_folding:
-                    return False
-
-        return True
 
 class FinnNodeWrapper(Node):
     def __init__(self, finn_node, channels_in, channels_out):
         self.finn_node = finn_node
         self.channels_in = channels_in
         self.channels_out = channels_out
+        self.constraints = { "matching_folding": self.finn_node.onnx_node.op_type not in ["StreamingFCLayer_Batch"] }
 
     def update(self):
         if get_by_name(self.finn_node.onnx_node.attribute, "SIMD") is not None:
