@@ -1,0 +1,6 @@
+{
+    "model_name" : "hls4ml_example",
+    "brevitas_finn_onnx" : false,
+    "weight_width" : 4,
+    "acc_width": 4
+}
