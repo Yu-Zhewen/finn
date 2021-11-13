@@ -96,8 +96,6 @@ def add_input_from_initializer(model : onnx.ModelProto):
 def add_weight_quantization_annotation(model, weight_width=16):
     for initializer in model.graph.initializer:
         tensor_name = initializer.name
-        import brevitas
-        import torch
         datatype = brevitas.export.onnx.finn.utils.finn_datatype(torch.tensor(weight_width), True)
     
         qa = onnx.TensorAnnotation()

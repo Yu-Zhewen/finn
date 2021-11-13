@@ -5,7 +5,7 @@ from backend.finn.parser import parse
 
 from optimiser.brute import BruteForce
 from optimiser.annealing import SimulatedAnnealing
-from optimiser.optimiser import load_from_opt_network
+from optimiser.network import load_from_opt_network
 
 def optimiser_main(model):
 
@@ -18,12 +18,14 @@ def optimiser_main(model):
         "BRAM" : 280,
         "FF" : 106400
     }
+    network.platform = platform
+
     print("optimser start")
     # perform optimisation on the computation graph
-    #opt = BruteForce(network, platform)
+    #opt = BruteForce(network)
     #opt.optimise()
     
-    opt = SimulatedAnnealing(network, platform)
+    opt = SimulatedAnnealing(network)
     opt.optimise()
     load_from_opt_network(network, opt.network)
 
