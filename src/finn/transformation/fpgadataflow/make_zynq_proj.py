@@ -299,6 +299,10 @@ class ZynqBuild(Transformation):
 
     def __init__(self, platform, period_ns, enable_debug=False):
         super().__init__()
+
+        pynq_part_map["Zedboard"] = "xc7z020clg484-1"
+        pynq_part_map["ZC706"] = "xc7z045ffg900-2"
+
         self.fpga_part = pynq_part_map[platform]
         self.period_ns = period_ns
         self.platform = platform

@@ -29,7 +29,10 @@ def set_batch_size(model, batch_size):
 
 def add_default_attribute(model):
     for node in model.graph.node:
-        if node.op_type == "MaxPool":
+        if node.op_type in ["Conv", "MaxPool"]:
+            attr = get_by_name(node.attribute, "auto_pad")
+            if attr == "VALID":
+                continue
             attr = get_by_name(node.attribute, "pads")
             if attr == None:
                 attr_proto = onnx.helper.make_attribute("pads", [0,0,0,0])
@@ -94,23 +97,29 @@ def add_input_from_initializer(model : onnx.ModelProto):
 
 
 def add_weight_quantization_annotation(model, weight_width=16):
-    for initializer in model.graph.initializer:
-        tensor_name = initializer.name
-        datatype = brevitas.export.onnx.finn.utils.finn_datatype(torch.tensor(weight_width), True)
-    
-        qa = onnx.TensorAnnotation()
-        dt = onnx.StringStringEntryProto()
-        dt.key = "finn_datatype"
-        dt.value = datatype
-        qa.tensor_name = tensor_name
-        qa.quant_parameter_tensor_names.append(dt)
-        model.graph.quantization_annotation.append(qa)
-        
-        from onnx import numpy_helper
-        W = numpy_helper.to_array(initializer).copy()
-        W *= 2 ** (weight_width-1)
-        W = W.astype(np.int32)
-        initializer.CopyFrom(numpy_helper.from_array(W, initializer.name))
+    for node in model.graph.node:
+        if node.op_type in ["Conv", "MatMul", "Gemm", "BatchNormalization"]:
+            for node_input in node.input:
+                initializer = [x for x in model.graph.initializer if x.name == node_input]
+                if len(initializer) > 0:
+                    initializer = initializer[0]
+
+                    tensor_name = initializer.name
+                    datatype = brevitas.export.onnx.finn.utils.finn_datatype(torch.tensor(weight_width), True)
+                
+                    qa = onnx.TensorAnnotation()
+                    dt = onnx.StringStringEntryProto()
+                    dt.key = "finn_datatype"
+                    dt.value = datatype
+                    qa.tensor_name = tensor_name
+                    qa.quant_parameter_tensor_names.append(dt)
+                    model.graph.quantization_annotation.append(qa)
+                    
+                    from onnx import numpy_helper
+                    W = numpy_helper.to_array(initializer).copy()
+                    W *= 2 ** (weight_width-1)
+                    W = W.astype(np.int32)
+                    initializer.CopyFrom(numpy_helper.from_array(W, initializer.name))
 
 
 # https://github.com/Xilinx/brevitas/blob/b4390dbe10b663489e71121b9232531a26a8ac36/src/brevitas/export/onnx/finn/handler/act.py
@@ -136,11 +145,11 @@ def add_activation_quantization_multithreshold(model, activation_width=16):
     processed_nodes = []
 
     for node in model.graph.node:
-        if node not in processed_nodes and (node.op_type == "Conv" or node.op_type == "MatMul" or node.op_type == "Gemm"):
+        if node not in processed_nodes and node.op_type in ["Conv", "MatMul", "Gemm"]:
             processed_nodes.append(node)
             producer = model.find_producer(node.input[0])
 
-            while producer != None and (producer.op_type == "Flatten" or producer.op_type == "MaxPool"): # FINN only support conv-activation-pooling
+            while producer != None and producer.op_type in ["Flatten", "Reshape", "Transpose", "MaxPool"]: # FINN only support conv-activation-pooling
                 node = producer
                 producer = model.find_producer(producer.input[0])
 

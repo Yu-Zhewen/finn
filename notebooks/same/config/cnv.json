@@ -1,0 +1,8 @@
+{
+    "model_name" : "cnv",
+    "brevitas_finn_onnx" : false,
+    "weight_width" : 4,
+    "acc_width": 4,
+    "device": "U250",
+    "clock_cycle": 5
+}

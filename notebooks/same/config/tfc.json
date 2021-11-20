@@ -1,0 +1,8 @@
+{
+    "model_name" : "tfc",
+    "brevitas_finn_onnx" : false,
+    "weight_width" : 4,
+    "acc_width": 4,
+    "device": "Zedboard",
+    "clock_cycle": 5
+}
