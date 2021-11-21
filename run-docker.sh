@@ -211,6 +211,7 @@ if [ ! -z "$VIVADO_PATH" ];then
   DOCKER_EXEC+="-e "XILINX_VIVADO=$VIVADO_PATH" "
   DOCKER_EXEC+="-v $VIVADO_PATH:$VIVADO_PATH "
   DOCKER_EXEC+="-e VIVADO_PATH=$VIVADO_PATH "
+  DOCKER_EXEC+="-v $HOME/.Xilinx:$HOME/.Xilinx "
 fi
 if [ ! -z "$VITIS_PATH" ];then
   if [ -z "$PLATFORM_REPO_PATHS" ];then
