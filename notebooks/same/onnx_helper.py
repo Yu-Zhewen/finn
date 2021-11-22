@@ -117,7 +117,8 @@ def add_weight_quantization_annotation(model, weight_width=16):
                     
                     from onnx import numpy_helper
                     W = numpy_helper.to_array(initializer).copy()
-                    W *= 2 ** (weight_width-1)
+                    W = W / np.abs(W).max()
+                    W *= (2 ** (weight_width-1) - 1)
                     W = W.astype(np.int32)
                     initializer.CopyFrom(numpy_helper.from_array(W, initializer.name))
 
