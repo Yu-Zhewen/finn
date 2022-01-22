@@ -79,7 +79,7 @@ class Streamline(Transformation):
             BatchNormToAffine(),
             ConvertSignToThres(),
             MoveMulPastMaxPool(),
-            MoveScalarLinearPastInvariants(),
+            #MoveScalarLinearPastInvariants(),
             AbsorbSignBiasIntoMultiThreshold(),
             MoveAddPastMul(),
             MoveScalarAddPastMatMul(),

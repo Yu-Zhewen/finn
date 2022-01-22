@@ -1,0 +1,8 @@
+{
+    "model_name" : "sfc",
+    "brevitas_finn_onnx" : false,
+    "weight_width" : 4,
+    "acc_width": 4,
+    "device": "ZC706",
+    "clock_cycle": 5
+}
