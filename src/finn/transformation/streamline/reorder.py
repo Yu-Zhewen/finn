@@ -599,6 +599,7 @@ class MoveScalarLinearPastInvariants(Transformation):
                 or n.op_type == "Reshape"
                 or n.op_type == "Transpose"
                 or n.op_type == "Flatten"
+                or n.op_type == "QuantAvgPool2d"
             ):
                 in0 = n.input[0]
                 if in0 is None:

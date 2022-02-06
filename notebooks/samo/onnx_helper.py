@@ -154,7 +154,7 @@ def add_activation_quantization_multithreshold(model, activation_width=16):
             processed_nodes.append(node)
             producer = model.find_producer(node.input[0])
 
-            while producer != None and producer.op_type in ["Flatten", "Reshape", "Transpose", "MaxPool"]: # FINN only support conv-activation-pooling
+            while producer != None and producer.op_type in ["Flatten", "Reshape", "Transpose", "MaxPool", "AveragePool"]: # FINN only support conv-activation-pooling
                 node = producer
                 producer = model.find_producer(producer.input[0])
 
@@ -234,6 +234,15 @@ def add_activation_quantization_multithreshold(model, activation_width=16):
                 model.graph.node.insert(node_index, scale_node)
                 model.graph.node.insert(node_index, bias_node)        
                 model.graph.node.insert(node_index, multi_threshold_node) 
+
+    for node in model.graph.node:
+        if node.op_type == "AveragePool":
+            stride = get_by_name(node.attribute, "strides").ints[0]
+            kernel = get_by_name(node.attribute, "kernel_shape").ints[0]
+            quant_node = onnx.helper.make_node("QuantAvgPool2d", [node.input[0]], [node.output[0]], domain="finn.custom_op.general", stride=stride, kernel=kernel, ibits=activation_width, obits=activation_width, signed=signed, data_layout="NCHW")
+            node_index = [i for i,n in enumerate(model.graph.node) if n == node][0]
+            model.graph.node.insert(node_index, quant_node)
+            model.graph.node.remove(node)
 
 def remove_redundant_nodes(model):
     for n in model.graph.node:
