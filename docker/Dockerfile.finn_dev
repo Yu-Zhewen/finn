@@ -77,7 +77,7 @@ RUN pip install scikit-learn==0.24.1
 RUN pip install tqdm==4.31.1
 RUN pip install -e git+https://github.com/fbcotter/dataset_loading.git@0.0.4#egg=dataset_loading
 RUN pip install tabulate
-
+RUN pip install Pyomo
 # switch user
 RUN groupadd -g $GID $GNAME
 RUN useradd -M -u $UID $UNAME -g $GNAME
