@@ -39,6 +39,7 @@ class Vector_Vector_Activate_Batch(HLSCustomOp):
             "accDataType": ("s", False, "INT32"),
             # no-activation mode (produce accumulators)
             "noActivation": ("i", False, 0, {0, 1}),
+            "BatchSize": ("i", False, 1),
         }
         my_attrs.update(super().get_nodeattr_types())
         return my_attrs
@@ -188,8 +189,9 @@ class Vector_Vector_Activate_Batch(HLSCustomOp):
         dim_h, dim_w = self.get_nodeattr("Dim")
         ch = self.get_nodeattr("Channels")
         pe = self.get_nodeattr("PE")
+        batch_size = self.get_nodeattr("BatchSize")
         nf = ch // pe
-        folded_input_shape = tuple([1, dim_h, dim_w, sf * nf, pe])
+        folded_input_shape = tuple([batch_size, dim_h, dim_w, sf * nf, pe])
         return folded_input_shape
 
     def get_folded_output_shape(self):
@@ -197,20 +199,23 @@ class Vector_Vector_Activate_Batch(HLSCustomOp):
         pe = self.get_nodeattr("PE")
         nf = ch // pe
         dim_h, dim_w = self.get_nodeattr("Dim")
-        folded_output_shape = tuple([1, dim_h, dim_w, nf, pe])
+        batch_size = self.get_nodeattr("BatchSize")
+        folded_output_shape = tuple([batch_size, dim_h, dim_w, nf, pe])
         return folded_output_shape
 
     def get_normal_input_shape(self):
         dim_h, dim_w = self.get_nodeattr("Dim")
         ch = self.get_nodeattr("Channels")
         k_h, k_w = self.get_nodeattr("Kernel")
-        normal_input_shape = tuple([1, dim_h, dim_w, k_h * k_w * ch])
+        batch_size = self.get_nodeattr("BatchSize")
+        normal_input_shape = tuple([batch_size, dim_h, dim_w, k_h * k_w * ch])
         return normal_input_shape
 
     def get_normal_output_shape(self):
         ch = self.get_nodeattr("Channels")
         dim_h, dim_w = self.get_nodeattr("Dim")
-        normal_output_shape = tuple([1, dim_h, dim_w, ch])
+        batch_size = self.get_nodeattr("BatchSize")
+        normal_output_shape = tuple([batch_size, dim_h, dim_w, ch])
         return normal_output_shape
 
     def get_number_output_values(self):
@@ -223,7 +228,7 @@ class Vector_Vector_Activate_Batch(HLSCustomOp):
         dim_h, dim_w = self.get_nodeattr("Dim")
         k_h, k_w = self.get_nodeattr("Kernel")
         # currently FINN supports for vvau a batch size of 1
-        batch_size = 1
+        batch_size = self.get_nodeattr("BatchSize")
         # since mmv != 1 is not supported yet, we set mmv for now to 1
         mmv = 1
         exp_cycles = ((ch * k_h * k_w) / pe) * batch_size * (dim_h * dim_w) / mmv

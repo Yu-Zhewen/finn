@@ -87,6 +87,7 @@ class ConvolutionInputGenerator1D(HLSCustomOp):
                 "distributed",
                 {"auto", "block", "distributed", "ultra"},
             ),
+            "BatchSize": ("i", False, 1),
         }
         my_attrs.update(super().get_nodeattr_types())
         return my_attrs
@@ -94,16 +95,19 @@ class ConvolutionInputGenerator1D(HLSCustomOp):
     def get_normal_input_shape(self):
         ifm_dim_h, ifm_dim_w = self.get_nodeattr("IFMDim")
         ifm_ch = self.get_nodeattr("IFMChannels")
-        ishape = (1, ifm_dim_h, ifm_dim_w, ifm_ch)
+        batch_size = self.get_nodeattr("BatchSize")
+
+        ishape = (batch_size, ifm_dim_h, ifm_dim_w, ifm_ch)
         return ishape
 
     def get_folded_input_shape(self):
         ifm_dim_h, ifm_dim_w = self.get_nodeattr("IFMDim")
         ifm_ch = self.get_nodeattr("IFMChannels")
         simd = self.get_nodeattr("SIMD")
+        batch_size = self.get_nodeattr("BatchSize")
         assert ifm_ch % simd == 0, "SIMD must divide IFMChannels"
         wf = int(ifm_ch / simd)
-        folded_ishape = (1, ifm_dim_h, ifm_dim_w, wf, simd)
+        folded_ishape = (batch_size, ifm_dim_h, ifm_dim_w, wf, simd)
         return folded_ishape
 
     def get_normal_output_shape(self):
@@ -112,10 +116,12 @@ class ConvolutionInputGenerator1D(HLSCustomOp):
         ifm_ch = self.get_nodeattr("IFMChannels")
         stride_h, stride_w = self.get_nodeattr("Stride")
         dilation_h, dilation_w = self.get_nodeattr("Dilation")
+        batch_size = self.get_nodeattr("BatchSize")
+
         pad = 0
         ofm_dim_h = compute_conv_output_dim(ifm_dim_h, k_h, stride_h, pad, dilation_h)
         ofm_dim_w = compute_conv_output_dim(ifm_dim_w, k_w, stride_w, pad, dilation_w)
-        oshape = (1, ofm_dim_h, ofm_dim_w, k_h * k_w * ifm_ch)
+        oshape = (batch_size, ofm_dim_h, ofm_dim_w, k_h * k_w * ifm_ch)
         return oshape
 
     def get_folded_output_shape(self):
@@ -125,12 +131,13 @@ class ConvolutionInputGenerator1D(HLSCustomOp):
         stride_h, stride_w = self.get_nodeattr("Stride")
         dilation_h, dilation_w = self.get_nodeattr("Dilation")
         simd = self.get_nodeattr("SIMD")
+        batch_size = self.get_nodeattr("BatchSize")
         pad = 0
         ofm_dim_h = compute_conv_output_dim(ifm_dim_h, k_h, stride_h, pad, dilation_h)
         ofm_dim_w = compute_conv_output_dim(ifm_dim_w, k_w, stride_w, pad, dilation_w)
         assert ifm_ch % simd == 0, "SIMD must divide IFMChannels"
         wf = int((k_h * k_w * ifm_ch) // simd)
-        folded_oshape = (1, ofm_dim_h, ofm_dim_w, wf, simd)
+        folded_oshape = (batch_size, ofm_dim_h, ofm_dim_w, wf, simd)
         return folded_oshape
 
     def make_shape_compatible_op(self, model):
@@ -221,6 +228,7 @@ class ConvolutionInputGenerator1D(HLSCustomOp):
 
     def get_exp_cycles(self):
         simd = self.get_nodeattr("SIMD")
+        batch_size = self.get_nodeattr("BatchSize")
         (
             ifm_ch,
             ifm_dim,
@@ -242,7 +250,7 @@ class ConvolutionInputGenerator1D(HLSCustomOp):
         cycles_read_block = stride_w * ifm_dim_w * (ifm_ch / simd)
         max_cycles = max(cycles_write_block, cycles_read_block)
         exp_cycles = (
-            ifm_dim_w * k_h * dilation_h * (ifm_ch / simd) + ofm_dim_h * max_cycles
+            ifm_dim_w * k_h * dilation_h * (ifm_ch / simd) + ofm_dim_h * max_cycles * batch_size
         )
 
         return int(exp_cycles)

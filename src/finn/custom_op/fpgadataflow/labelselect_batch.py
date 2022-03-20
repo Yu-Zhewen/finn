@@ -356,5 +356,6 @@ class LabelSelect_Batch(HLSCustomOp):
     def get_exp_cycles(self):
         nlabels = self.get_nodeattr("Labels")
         pe = self.get_nodeattr("PE")
-        exp_cycles = nlabels / pe
+        batch_size = list(self.get_nodeattr("numInputVectors"))[0]
+        exp_cycles = nlabels / pe * batch_size
         return int(exp_cycles)

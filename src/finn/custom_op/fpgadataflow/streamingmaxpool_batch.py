@@ -46,6 +46,7 @@ class StreamingMaxPool_Batch(HLSCustomOp):
             "NumChannels": ("i", True, 0),
             # FINN DataTypes for inputs/outputs
             "dataType": ("s", True, ""),
+            "BatchSize": ("i", False, 1),
         }
         my_attrs.update(super().get_nodeattr_types())
         return my_attrs
@@ -61,7 +62,8 @@ class StreamingMaxPool_Batch(HLSCustomOp):
     def get_normal_input_shape(self):
         ifm_dim = self.get_nodeattr("ImgDim")
         ifm_ch = self.get_nodeattr("NumChannels")
-        ishape = (1, ifm_dim, ifm_dim, ifm_ch)
+        batch_size = self.get_nodeattr("BatchSize")
+        ishape = (batch_size, ifm_dim, ifm_dim, ifm_ch)
         return ishape
 
     def get_folded_input_shape(self):
@@ -76,11 +78,12 @@ class StreamingMaxPool_Batch(HLSCustomOp):
         k = self.get_nodeattr("PoolDim")
         ifm_dim = self.get_nodeattr("ImgDim")
         ifm_ch = self.get_nodeattr("NumChannels")
+        batch_size = self.get_nodeattr("BatchSize")
         stride = k
         pad = 0
         assert ifm_dim % k == 0, "StreamingMaxPool needs ImgDim % PoolDim == 0"
         ofm_dim = compute_conv_output_dim(ifm_dim, k, stride, pad)
-        oshape = (1, ofm_dim, ofm_dim, ifm_ch)
+        oshape = (batch_size, ofm_dim, ofm_dim, ifm_ch)
         return oshape
 
     def get_folded_output_shape(self):
@@ -99,7 +102,8 @@ class StreamingMaxPool_Batch(HLSCustomOp):
         # derived from StreamingMaxPool_Batch loop nest
         k = self.get_nodeattr("PoolDim")
         ifm_dim = self.get_nodeattr("ImgDim")
-        return int(ifm_dim * (ifm_dim + (ifm_dim / k)))
+        batch_size = self.get_nodeattr("BatchSize")
+        return int(ifm_dim * (ifm_dim + (ifm_dim / k)) * batch_size)
 
     def get_instream_width(self):
         dt_bits = self.get_input_datatype().bitwidth()

@@ -249,4 +249,37 @@ def remove_redundant_nodes(model):
         if n.op_type in ["Softmax"]:
             from finn.transformation.streamline.remove import _remove_node_and_rewire
             _remove_node_and_rewire(model, n)
-    
+
+# some transforms cannot handle the case of batch size > 1
+def fix_batch_size(model, batch_size):
+    for value_info in model.graph.value_info:
+        bIsInitializer = False
+        for initializer in model.graph.initializer:
+            if initializer.name == value_info.name:
+                bIsInitializer = True
+                
+        if not bIsInitializer:
+            assert value_info.type.tensor_type.shape.dim[0].dim_value == 1
+            value_info.type.tensor_type.shape.dim[0].dim_value = batch_size
+
+    for input in model.graph.input:
+        assert input.type.tensor_type.shape.dim[0].dim_value == 1
+        input.type.tensor_type.shape.dim[0].dim_value = batch_size
+
+    for output in model.graph.output:
+        assert output.type.tensor_type.shape.dim[0].dim_value == 1
+        output.type.tensor_type.shape.dim[0].dim_value = batch_size
+            
+    for node in model.graph.node:
+        instr = getCustomOp(node)
+        if "numInputVectors" in instr.get_nodeattr_types().keys():
+            numInputVectors = get_by_name(instr.onnx_node.attribute, "numInputVectors")
+            if numInputVectors is not None:
+                assert numInputVectors.ints[0] == 1
+                numInputVectors.ints[0] = batch_size
+            else:
+                instr.set_nodeattr("numInputVectors", batch_size)
+
+        elif "BatchSize" in instr.get_nodeattr_types().keys():
+            instr.set_nodeattr("BatchSize", batch_size)
+            
