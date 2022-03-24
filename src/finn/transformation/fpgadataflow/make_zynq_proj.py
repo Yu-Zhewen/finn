@@ -336,21 +336,21 @@ class ZynqBuild(Transformation):
                 PrepareIP(self.fpga_part, self.period_ns)
             )
             kernel_model = kernel_model.transform(HLSSynthIP())
-            kernel_model = kernel_model.transform(
-                CreateStitchedIP(
-                    self.fpga_part, self.period_ns, sdp_node.onnx_node.name, True
-                )
-            )
+            #kernel_model = kernel_model.transform(
+            #    CreateStitchedIP(
+            #        self.fpga_part, self.period_ns, sdp_node.onnx_node.name, True
+            #    )
+            #)
             kernel_model.set_metadata_prop("platform", "zynq-iodma")
             kernel_model.save(dataflow_model_filename)
         # Assemble design from IPs
-        model = model.transform(
-            MakeZYNQProject(self.platform, enable_debug=self.enable_debug)
-        )
+        #model = model.transform(
+        #    MakeZYNQProject(self.platform, enable_debug=self.enable_debug)
+        #)
 
         # set platform attribute for correct remote execution
         model.set_metadata_prop("platform", "zynq-iodma")
 
         # create driver
-        model = model.transform(MakePYNQDriver(platform="zynq-iodma"))
+        #model = model.transform(MakePYNQDriver(platform="zynq-iodma"))
         return (model, False)

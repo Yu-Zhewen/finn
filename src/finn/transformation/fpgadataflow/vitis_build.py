@@ -384,7 +384,7 @@ class VitisBuild(Transformation):
         self.enable_link = enable_link
 
     def apply(self, model):
-        _check_vitis_envvars()
+        #_check_vitis_envvars()
         # first infer layouts
         model = model.transform(InferDataLayouts())
         # prepare at global level, then break up into kernels
@@ -414,29 +414,29 @@ class VitisBuild(Transformation):
                 PrepareIP(self.fpga_part, self.period_ns)
             )
             kernel_model = kernel_model.transform(HLSSynthIP())
-            kernel_model = kernel_model.transform(
-                CreateStitchedIP(
-                    self.fpga_part, self.period_ns, sdp_node.onnx_node.name, True
-                )
-            )
-            kernel_model = kernel_model.transform(
-                CreateVitisXO(sdp_node.onnx_node.name)
-            )
+            #kernel_model = kernel_model.transform(
+            #    CreateStitchedIP(
+            #        self.fpga_part, self.period_ns, sdp_node.onnx_node.name, True
+            #    )
+            #)
+            #kernel_model = kernel_model.transform(
+            #    CreateVitisXO(sdp_node.onnx_node.name)
+            #)
             kernel_model.set_metadata_prop("platform", "alveo")
             kernel_model.save(dataflow_model_filename)
         # Assemble design from kernels
-        if self.enable_link:
-            model = model.transform(
-                VitisLink(
-                    self.platform,
-                    round(1000 / self.period_ns),
-                    strategy=self.strategy,
-                    enable_debug=self.enable_debug,
-                )
-            )
+        #if self.enable_link:
+        #    model = model.transform(
+        #        VitisLink(
+        #            self.platform,
+        #            round(1000 / self.period_ns),
+        #            strategy=self.strategy,
+        #            enable_debug=self.enable_debug,
+        #        )
+        #    )
         # set platform attribute for correct remote execution
-        model.set_metadata_prop("platform", "alveo")
+        #model.set_metadata_prop("platform", "alveo")
 
         # create driver
-        model = model.transform(MakePYNQDriver(platform="alveo"))
+        #model = model.transform(MakePYNQDriver(platform="alveo"))
         return (model, False)

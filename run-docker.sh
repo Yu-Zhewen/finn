@@ -57,7 +57,7 @@ else
   if [ -z "$PLATFORM_REPO_PATHS" ];then
     recho "Please set PLATFORM_REPO_PATHS pointing to Vitis platform files (DSAs)."
     recho "This is required to be able to use Vitis."
-    exit -1
+    #exit -1
   fi
 fi
 
@@ -162,7 +162,7 @@ gecho "Mounting $FINN_HOST_BUILD_DIR into $FINN_HOST_BUILD_DIR"
 gecho "Mounting $VIVADO_PATH into $VIVADO_PATH"
 if [ ! -z "$VITIS_PATH" ];then
   gecho "Mounting $VITIS_PATH into $VITIS_PATH"
-  INSTALL_XRT_DEPS=1
+  #INSTALL_XRT_DEPS=1
 fi
 gecho "Port-forwarding for Jupyter $JUPYTER_PORT:$JUPYTER_PORT"
 gecho "Port-forwarding for Netron $NETRON_PORT:$NETRON_PORT"
@@ -216,7 +216,7 @@ fi
 if [ ! -z "$VITIS_PATH" ];then
   if [ -z "$PLATFORM_REPO_PATHS" ];then
     recho "PLATFORM_REPO_PATHS must be set for Vitis/Alveo flows"
-    exit -1
+    #exit -1
   fi
   DOCKER_EXEC+="-v $VITIS_PATH:$VITIS_PATH "
   DOCKER_EXEC+="-v $PLATFORM_REPO_PATHS:$PLATFORM_REPO_PATHS "
